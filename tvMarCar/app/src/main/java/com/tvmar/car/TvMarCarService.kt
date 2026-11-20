@@ -58,12 +58,13 @@ class TvMarCarService : MediaLibraryService() {
 
     // ---------- Éléments ----------
 
-    private fun folder(id: String, title: String, subtitle: String? = null) = MediaItem.Builder()
+    private fun folder(id: String, title: String, subtitle: String? = null, art: String = "quran") = MediaItem.Builder()
         .setMediaId(id)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)
                 .setSubtitle(subtitle)
+                .setArtworkUri(ArtProvider.uri(art))
                 .setIsBrowsable(true)
                 .setIsPlayable(false)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
@@ -78,20 +79,21 @@ class TvMarCarService : MediaLibraryService() {
                 .setTitle("$n. سورة ${Catalog.suras[n - 1]}")
                 .setArtist(r.name)
                 .setAlbumTitle(m.name)
+                .setArtworkUri(ArtProvider.uri("sura"))
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                 .build()
         ).build()
 
-    private fun radioItem(prefixId: String, r: Repo.Radio) = MediaItem.Builder()
+    private fun radioItem(prefixId: String, r: Repo.Radio, fallbackArt: String) = MediaItem.Builder()
         .setMediaId(prefixId)
         .setUri(r.url)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(r.name)
                 .setArtist("بث مباشر")
-                .setArtworkUri(r.icon?.let { Uri.parse(it) })
+                .setArtworkUri(r.icon?.let { Uri.parse(it) } ?: ArtProvider.uri(fallbackArt))
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
@@ -100,42 +102,42 @@ class TvMarCarService : MediaLibraryService() {
 
     private fun children(parentId: String): List<MediaItem> = when {
         parentId == ROOT -> listOf(
-            folder(QURAN, "القرآن الكريم", "جميع القرّاء والروايات"),
-            folder(QRADIO, "إذاعات القرآن الكريم", "بث مباشر"),
-            folder(MRADIO, "الإذاعات المغربية", "بث مباشر")
+            folder(QURAN, "القرآن الكريم", "جميع القرّاء والروايات", "quran"),
+            folder(QRADIO, "إذاعات القرآن الكريم", "بث مباشر", "qradio"),
+            folder(MRADIO, "الإذاعات المغربية", "بث مباشر", "mradio")
         )
-        parentId == QURAN -> Repo.lettersSorted().map { folder("letter:$it", "حرف $it") }
+        parentId == QURAN -> Repo.lettersSorted().map { folder("letter:$it", "حرف $it", null, "letter") }
         parentId.startsWith("letter:") ->
-            Repo.recitersOfLetter(parentId.removePrefix("letter:")).map { folder("rec:${it.id}", it.name) }
+            Repo.recitersOfLetter(parentId.removePrefix("letter:")).map { folder("rec:${it.id}", it.name, null, "reciter") }
         parentId.startsWith("rec:") -> {
             val r = parentId.removePrefix("rec:").toIntOrNull()?.let { Repo.reciter(it) }
             when {
                 r == null -> emptyList()
                 r.moshafs.size == 1 -> r.moshafs[0].surahs.map { suraItem(r, r.moshafs[0], it) }
-                else -> r.moshafs.map { folder("mo:${it.id}", it.name, r.name) }
+                else -> r.moshafs.map { folder("mo:${it.id}", it.name, r.name, "reciter") }
             }
         }
         parentId.startsWith("mo:") -> {
             val p = parentId.removePrefix("mo:").toIntOrNull()?.let { Repo.moshaf(it) }
             if (p == null) emptyList() else p.second.surahs.map { suraItem(p.first, p.second, it) }
         }
-        parentId == QRADIO -> Repo.getQuranRadios().map { radioItem("qr:${it.id}", it) }
-        parentId == MRADIO -> Repo.getMoroccanRadios().map { radioItem("mr:${it.id}", it) }
+        parentId == QRADIO -> Repo.getQuranRadios().map { radioItem("qr:${it.id}", it, "qradio") }
+        parentId == MRADIO -> Repo.getMoroccanRadios().map { radioItem("mr:${it.id}", it, "mradio") }
         else -> emptyList()
     }
 
     private fun resolve(id: String): MediaItem? = when {
         id == ROOT -> folder(ROOT, "tvMar Car")
-        id == QURAN -> folder(QURAN, "القرآن الكريم")
-        id == QRADIO -> folder(QRADIO, "إذاعات القرآن الكريم")
-        id == MRADIO -> folder(MRADIO, "الإذاعات المغربية")
-        id.startsWith("letter:") -> folder(id, "حرف ${id.removePrefix("letter:")}")
+        id == QURAN -> folder(QURAN, "القرآن الكريم", null, "quran")
+        id == QRADIO -> folder(QRADIO, "إذاعات القرآن الكريم", null, "qradio")
+        id == MRADIO -> folder(MRADIO, "الإذاعات المغربية", null, "mradio")
+        id.startsWith("letter:") -> folder(id, "حرف ${id.removePrefix("letter:")}", null, "letter")
         id.startsWith("rec:") -> id.removePrefix("rec:").toIntOrNull()?.let { Repo.reciter(it) }
-            ?.let { folder(id, it.name) }
+            ?.let { folder(id, it.name, null, "reciter") }
         id.startsWith("mo:") -> id.removePrefix("mo:").toIntOrNull()?.let { Repo.moshaf(it) }
-            ?.let { folder(id, it.second.name, it.first.name) }
-        id.startsWith("qr:") -> Repo.radio(id.removePrefix("qr:"))?.let { radioItem(id, it) }
-        id.startsWith("mr:") -> Repo.radio(id.removePrefix("mr:"))?.let { radioItem(id, it) }
+            ?.let { folder(id, it.second.name, it.first.name, "reciter") }
+        id.startsWith("qr:") -> Repo.radio(id.removePrefix("qr:"))?.let { radioItem(id, it, "qradio") }
+        id.startsWith("mr:") -> Repo.radio(id.removePrefix("mr:"))?.let { radioItem(id, it, "mradio") }
         id.startsWith("s:") -> {
             val p = id.split(":")
             val mo = p.getOrNull(1)?.toIntOrNull()?.let { Repo.moshaf(it) }
