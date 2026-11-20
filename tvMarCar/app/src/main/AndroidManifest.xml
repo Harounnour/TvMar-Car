@@ -21,6 +21,11 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <provider
+            android:name=".ArtProvider"
+            android:authorities="com.tvmar.car.art"
+            android:exported="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
